@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -183,6 +184,321 @@ var _ = Describe("Project Controller", func() {
 				NamespacedName: types.NamespacedName{Name: "nonexistent-project"},
 			})
 			Expect(err).NotTo(HaveOccurred())
+		})
+	})
+
+	Context("Namespace attachment", func() {
+		const (
+			nsProjectName        = "ns-attach-project"
+			projectLabelKey      = "platform.example.io/project-name"
+			projectAnnotationKey = "platform.example.io/project-name"
+		)
+
+		nsProjectNN := types.NamespacedName{Name: nsProjectName}
+
+		AfterEach(func() {
+			// Strip project labels and annotations from all test namespaces
+			// to prevent cross-test contamination (envtest cannot fully delete namespaces).
+			nsList := &corev1.NamespaceList{}
+			if err := k8sClient.List(ctx, nsList); err == nil {
+				for i := range nsList.Items {
+					ns := &nsList.Items[i]
+					needsUpdate := false
+					if ns.Labels != nil && ns.Labels[projectLabelKey] != "" {
+						delete(ns.Labels, projectLabelKey)
+						needsUpdate = true
+					}
+					if ns.Annotations != nil && ns.Annotations[projectAnnotationKey] != "" {
+						delete(ns.Annotations, projectAnnotationKey)
+						needsUpdate = true
+					}
+					if needsUpdate {
+						Expect(k8sClient.Update(ctx, ns)).To(Succeed())
+					}
+				}
+			}
+
+			// Clean up project
+			project := &platformv1alpha1.Project{}
+			err := k8sClient.Get(ctx, nsProjectNN, project)
+			if errors.IsNotFound(err) {
+				return
+			}
+			Expect(err).NotTo(HaveOccurred())
+
+			if controllerutil.ContainsFinalizer(project, projectFinalizerName) {
+				controllerutil.RemoveFinalizer(project, projectFinalizerName)
+				Expect(k8sClient.Update(ctx, project)).To(Succeed())
+			}
+
+			err = k8sClient.Get(ctx, nsProjectNN, project)
+			if errors.IsNotFound(err) {
+				return
+			}
+			Expect(err).NotTo(HaveOccurred())
+			Expect(k8sClient.Delete(ctx, project)).To(Succeed())
+		})
+
+		// Tests are marked Pending (PIt) because the controller doesn't implement
+		// namespace logic yet (TDD red phase). Change PIt → It when implementing Task 5.
+
+		PIt("should set annotation on namespace with project label", func() {
+			project := &platformv1alpha1.Project{
+				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
+			}
+			Expect(k8sClient.Create(ctx, project)).To(Succeed())
+
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ns-attach-annot",
+					Labels: map[string]string{
+						projectLabelKey: nsProjectName,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			_, err := reconciler().Reconcile(ctx, reconcile.Request{
+				NamespacedName: nsProjectNN,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			updated := &corev1.Namespace{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "ns-attach-annot"}, updated)).To(Succeed())
+			Expect(updated.Annotations).To(HaveKeyWithValue(projectAnnotationKey, nsProjectName),
+				"annotation %s must be set to project name", projectAnnotationKey)
+		})
+
+		PIt("should populate status.namespaces with labeled namespaces", func() {
+			project := &platformv1alpha1.Project{
+				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
+			}
+			Expect(k8sClient.Create(ctx, project)).To(Succeed())
+
+			for _, nsName := range []string{"ns-attach-status-1", "ns-attach-status-2"} {
+				ns := &corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: nsName,
+						Labels: map[string]string{
+							projectLabelKey: nsProjectName,
+						},
+					},
+				}
+				Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+			}
+
+			_, err := reconciler().Reconcile(ctx, reconcile.Request{
+				NamespacedName: nsProjectNN,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			updated := &platformv1alpha1.Project{}
+			Expect(k8sClient.Get(ctx, nsProjectNN, updated)).To(Succeed())
+			Expect(updated.Status.Namespaces).To(HaveLen(2),
+				"status.namespaces must contain all labeled namespaces")
+
+			nsNames := make([]string, len(updated.Status.Namespaces))
+			for i, ns := range updated.Status.Namespaces {
+				nsNames[i] = ns.Name
+			}
+			Expect(nsNames).To(ContainElements("ns-attach-status-1", "ns-attach-status-2"))
+		})
+
+		PIt("should include namespace phase in status.namespaces entries", func() {
+			project := &platformv1alpha1.Project{
+				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
+			}
+			Expect(k8sClient.Create(ctx, project)).To(Succeed())
+
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ns-attach-phase",
+					Labels: map[string]string{
+						projectLabelKey: nsProjectName,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			_, err := reconciler().Reconcile(ctx, reconcile.Request{
+				NamespacedName: nsProjectNN,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			updated := &platformv1alpha1.Project{}
+			Expect(k8sClient.Get(ctx, nsProjectNN, updated)).To(Succeed())
+			Expect(updated.Status.Namespaces).To(HaveLen(1))
+			Expect(updated.Status.Namespaces[0].Name).To(Equal("ns-attach-phase"))
+			Expect(updated.Status.Namespaces[0].Status).To(Equal("Active"),
+				"namespace status must reflect the namespace phase")
+		})
+
+		PIt("should not include namespaces labeled for a different project", func() {
+			project := &platformv1alpha1.Project{
+				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
+			}
+			Expect(k8sClient.Create(ctx, project)).To(Succeed())
+
+			nsMine := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ns-attach-mine",
+					Labels: map[string]string{
+						projectLabelKey: nsProjectName,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, nsMine)).To(Succeed())
+
+			nsOther := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ns-attach-other",
+					Labels: map[string]string{
+						projectLabelKey: "some-other-project",
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, nsOther)).To(Succeed())
+
+			_, err := reconciler().Reconcile(ctx, reconcile.Request{
+				NamespacedName: nsProjectNN,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			updated := &platformv1alpha1.Project{}
+			Expect(k8sClient.Get(ctx, nsProjectNN, updated)).To(Succeed())
+			Expect(updated.Status.Namespaces).To(HaveLen(1),
+				"status.namespaces must only contain namespaces for this project")
+			Expect(updated.Status.Namespaces[0].Name).To(Equal("ns-attach-mine"))
+		})
+
+		PIt("should remove namespace from status when namespace is deleted", func() {
+			project := &platformv1alpha1.Project{
+				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
+			}
+			Expect(k8sClient.Create(ctx, project)).To(Succeed())
+
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ns-attach-del",
+					Labels: map[string]string{
+						projectLabelKey: nsProjectName,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			// First reconcile — namespace should appear in status
+			r := reconciler()
+			_, err := r.Reconcile(ctx, reconcile.Request{
+				NamespacedName: nsProjectNN,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			first := &platformv1alpha1.Project{}
+			Expect(k8sClient.Get(ctx, nsProjectNN, first)).To(Succeed())
+			Expect(first.Status.Namespaces).To(HaveLen(1),
+				"namespace must appear in status after first reconcile")
+
+			// Delete namespace
+			Expect(k8sClient.Delete(ctx, ns)).To(Succeed())
+
+			// Second reconcile — namespace must be removed from status
+			_, err = r.Reconcile(ctx, reconcile.Request{
+				NamespacedName: nsProjectNN,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			second := &platformv1alpha1.Project{}
+			Expect(k8sClient.Get(ctx, nsProjectNN, second)).To(Succeed())
+			Expect(second.Status.Namespaces).To(BeEmpty(),
+				"deleted namespace must be removed from status.namespaces")
+		})
+
+		PIt("should restore label if removed from managed namespace", func() {
+			project := &platformv1alpha1.Project{
+				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
+			}
+			Expect(k8sClient.Create(ctx, project)).To(Succeed())
+
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ns-attach-restore",
+					Labels: map[string]string{
+						projectLabelKey: nsProjectName,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			// First reconcile — sets annotation
+			r := reconciler()
+			_, err := r.Reconcile(ctx, reconcile.Request{
+				NamespacedName: nsProjectNN,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Verify annotation was set
+			annotated := &corev1.Namespace{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "ns-attach-restore"}, annotated)).To(Succeed())
+			Expect(annotated.Annotations).To(HaveKeyWithValue(projectAnnotationKey, nsProjectName),
+				"annotation must be set after first reconcile")
+
+			// Remove label (simulate external actor)
+			delete(annotated.Labels, projectLabelKey)
+			Expect(k8sClient.Update(ctx, annotated)).To(Succeed())
+
+			// Verify label is gone
+			stripped := &corev1.Namespace{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "ns-attach-restore"}, stripped)).To(Succeed())
+			Expect(stripped.Labels).NotTo(HaveKey(projectLabelKey),
+				"label must be removed before second reconcile")
+
+			// Second reconcile — should restore label
+			_, err = r.Reconcile(ctx, reconcile.Request{
+				NamespacedName: nsProjectNN,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			restored := &corev1.Namespace{}
+			Expect(k8sClient.Get(ctx, types.NamespacedName{Name: "ns-attach-restore"}, restored)).To(Succeed())
+			Expect(restored.Labels).To(HaveKeyWithValue(projectLabelKey, nsProjectName),
+				"label must be restored on managed namespace (has annotation)")
+		})
+
+		PIt("should not duplicate namespaces in status on repeated reconciles", func() {
+			project := &platformv1alpha1.Project{
+				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
+			}
+			Expect(k8sClient.Create(ctx, project)).To(Succeed())
+
+			ns := &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "ns-attach-idem",
+					Labels: map[string]string{
+						projectLabelKey: nsProjectName,
+					},
+				},
+			}
+			Expect(k8sClient.Create(ctx, ns)).To(Succeed())
+
+			r := reconciler()
+
+			// First reconcile
+			_, err := r.Reconcile(ctx, reconcile.Request{
+				NamespacedName: nsProjectNN,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			// Second reconcile
+			_, err = r.Reconcile(ctx, reconcile.Request{
+				NamespacedName: nsProjectNN,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			updated := &platformv1alpha1.Project{}
+			Expect(k8sClient.Get(ctx, nsProjectNN, updated)).To(Succeed())
+			Expect(updated.Status.Namespaces).To(HaveLen(1),
+				"status.namespaces must not have duplicates after repeated reconcile")
 		})
 	})
 })
