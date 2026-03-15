@@ -1,0 +1,15 @@
+apiVersion: platform.example.io/v1alpha1
+kind: ProjectAccessBinding
+metadata:
+  name: billing-developers
+spec:
+  projectRef:
+    name: billing
+  role: "project.developer"
+  subjects:
+    - kind: Group
+      name: billing-developers
+      apiGroup: rbac.authorization.k8s.io
+    - kind: User
+      name: alice@example.com
+      apiGroup: rbac.authorization.k8s.io

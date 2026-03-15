@@ -1,0 +1,12 @@
+apiVersion: platform.example.io/v1alpha1
+kind: Project
+metadata:
+  name: billing
+spec:
+  displayName: "Billing"
+  description: "Project for billing services"
+  quotas:
+    requests.cpu: "100"
+    requests.memory: "200Gi"
+    limits.cpu: "200"
+    limits.memory: "400Gi"
