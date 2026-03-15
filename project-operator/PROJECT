@@ -10,7 +10,7 @@ repo: github.com/example/project-operator
 resources:
 - api:
     crdVersion: v1
-    namespaced: true
+    namespaced: false
   controller: true
   domain: example.io
   group: platform
@@ -19,7 +19,7 @@ resources:
   version: v1alpha1
 - api:
     crdVersion: v1
-    namespaced: true
+    namespaced: false
   controller: true
   domain: example.io
   group: platform
@@ -28,7 +28,7 @@ resources:
   version: v1alpha1
 - api:
     crdVersion: v1
-    namespaced: true
+    namespaced: false
   controller: true
   domain: example.io
   group: platform

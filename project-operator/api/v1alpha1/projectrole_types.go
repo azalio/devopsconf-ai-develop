@@ -46,7 +46,7 @@ type ProjectRole struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ProjectRoleSpec   `json:"spec,omitempty"`
+	Spec   ProjectRoleSpec   `json:"spec"`
 	Status ProjectRoleStatus `json:"status,omitempty"`
 }
 

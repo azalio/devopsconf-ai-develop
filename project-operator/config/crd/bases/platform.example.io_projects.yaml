@@ -21,7 +21,7 @@ spec:
     - jsonPath: .status.namespaces[*].name
       name: Namespaces
       priority: 1
-      type: integer
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date

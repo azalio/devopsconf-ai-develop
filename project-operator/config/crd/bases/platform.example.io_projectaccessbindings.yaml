@@ -125,6 +125,11 @@ spec:
             - projectRef
             - subjects
             type: object
+            x-kubernetes-validations:
+            - message: either role or roleRef must be specified
+              rule: has(self.role) || has(self.roleRef)
+            - message: role and roleRef are mutually exclusive
+              rule: '!(has(self.role) && has(self.roleRef))'
           status:
             description: ProjectAccessBindingStatus defines the observed state of
               ProjectAccessBinding.
@@ -188,6 +193,8 @@ spec:
                   type: object
                 type: array
             type: object
+        required:
+        - spec
         type: object
     served: true
     storage: true

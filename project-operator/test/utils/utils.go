@@ -42,12 +42,11 @@ func warnError(err error) {
 
 // Run executes the provided command within this context
 func Run(cmd *exec.Cmd) (string, error) {
-	dir, _ := GetProjectDir()
-	cmd.Dir = dir
-
-	if err := os.Chdir(cmd.Dir); err != nil {
-		_, _ = fmt.Fprintf(GinkgoWriter, "chdir dir: %s\n", err)
+	dir, err := GetProjectDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get project dir: %w", err)
 	}
+	cmd.Dir = dir
 
 	cmd.Env = append(os.Environ(), "GO111MODULE=on")
 	command := strings.Join(cmd.Args, " ")
@@ -214,7 +213,7 @@ func UncommentCode(filename, target, prefix string) error {
 
 	idx := strings.Index(strContent, target)
 	if idx < 0 {
-		return fmt.Errorf("unable to find the code %s to be uncomment", target)
+		return fmt.Errorf("unable to find the code %s to uncomment", target)
 	}
 
 	out := new(bytes.Buffer)

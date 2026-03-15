@@ -79,7 +79,7 @@ type ProjectStatus struct {
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
-// +kubebuilder:printcolumn:name="Namespaces",type=integer,JSONPath=`.status.namespaces[*].name`,priority=1
+// +kubebuilder:printcolumn:name="Namespaces",type=string,JSONPath=`.status.namespaces[*].name`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 
 // Project is the Schema for the projects API.

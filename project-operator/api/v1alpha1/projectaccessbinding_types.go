@@ -38,6 +38,8 @@ type RoleReference struct {
 }
 
 // ProjectAccessBindingSpec defines the desired state of ProjectAccessBinding.
+// +kubebuilder:validation:XValidation:rule="has(self.role) || has(self.roleRef)",message="either role or roleRef must be specified"
+// +kubebuilder:validation:XValidation:rule="!(has(self.role) && has(self.roleRef))",message="role and roleRef are mutually exclusive"
 type ProjectAccessBindingSpec struct {
 	// ProjectRef references the project this binding applies to.
 	ProjectRef ProjectReference `json:"projectRef"`
@@ -78,7 +80,7 @@ type ProjectAccessBinding struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   ProjectAccessBindingSpec   `json:"spec,omitempty"`
+	Spec   ProjectAccessBindingSpec   `json:"spec"`
 	Status ProjectAccessBindingStatus `json:"status,omitempty"`
 }
 

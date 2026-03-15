@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -37,8 +38,7 @@ var _ = Describe("ProjectAccessBinding Controller", func() {
 		ctx := context.Background()
 
 		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Name: resourceName,
 		}
 		projectaccessbinding := &platformv1alpha1.ProjectAccessBinding{}
 
@@ -48,17 +48,27 @@ var _ = Describe("ProjectAccessBinding Controller", func() {
 			if err != nil && errors.IsNotFound(err) {
 				resource := &platformv1alpha1.ProjectAccessBinding{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
+						Name: resourceName,
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: platformv1alpha1.ProjectAccessBindingSpec{
+						ProjectRef: platformv1alpha1.ProjectReference{
+							Name: "test-project",
+						},
+						Role: "project.viewer",
+						Subjects: []rbacv1.Subject{
+							{
+								Kind:     "User",
+								Name:     "test-user",
+								APIGroup: "rbac.authorization.k8s.io",
+							},
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &platformv1alpha1.ProjectAccessBinding{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
@@ -77,8 +87,6 @@ var _ = Describe("ProjectAccessBinding Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
 	})
 })
