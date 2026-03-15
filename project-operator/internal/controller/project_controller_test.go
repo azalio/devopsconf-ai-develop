@@ -30,10 +30,6 @@ import (
 	platformv1alpha1 "github.com/example/project-operator/api/v1alpha1"
 )
 
-const (
-	projectFinalizerName = "platform.example.io/project-protection"
-)
-
 var _ = Describe("Project Controller", func() {
 	const projectName = "test-project"
 
@@ -63,6 +59,14 @@ var _ = Describe("Project Controller", func() {
 			controllerutil.RemoveFinalizer(project, projectFinalizerName)
 			Expect(k8sClient.Update(ctx, project)).To(Succeed())
 		}
+
+		// If the object had a deletionTimestamp, removing the finalizer
+		// causes Kubernetes to auto-delete it.
+		err = k8sClient.Get(ctx, namespacedName, project)
+		if errors.IsNotFound(err) {
+			return
+		}
+		Expect(err).NotTo(HaveOccurred())
 		Expect(k8sClient.Delete(ctx, project)).To(Succeed())
 	})
 
