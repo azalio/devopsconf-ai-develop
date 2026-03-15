@@ -72,6 +72,28 @@ kubectl --context kind-devops26 <command>
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
 ```
 
+## Testing
+
+Tests use controller-runtime **envtest** (real etcd + kube-apiserver, no full cluster).
+All tests MUST run in **WSL Ubuntu** because envtest binaries are Linux-only.
+
+```bash
+# Run unit/envtest tests from Git Bash / Claude Code:
+printf '#!/bin/bash
+export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
+export KUBEBUILDER_ASSETS=/root/.local/share/kubebuilder-envtest/k8s/1.32.0-linux-amd64
+cd /mnt/e/code/devops26-ai-develop/project-operator
+go test ./internal/controller/ -v -count=1 2>&1
+' | MSYS_NO_PATHCONV=1 WSLENV= wsl -d Ubuntu --exec bash
+```
+
+Key points:
+- `MSYS_NO_PATHCONV=1 WSLENV=` — prevents Git Bash from mangling paths and leaking Windows PATH (which contains parentheses that break bash)
+- `printf ... | wsl --exec bash` — pipe the script to avoid path mangling in arguments
+- envtest linux binaries installed via `setup-envtest use 1.32` inside WSL (stored at `/root/.local/share/kubebuilder-envtest/`)
+- CRD paths are at `config/crd/bases/` (relative, resolved by suite_test.go)
+- Test framework: Ginkgo/Gomega (BDD-style)
+
 ## Known Gotchas
 
 - kubebuilder has no Windows binary — all Go/make commands must run via WSL Ubuntu
