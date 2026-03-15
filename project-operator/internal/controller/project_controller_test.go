@@ -239,10 +239,7 @@ var _ = Describe("Project Controller", func() {
 			Expect(k8sClient.Delete(ctx, project)).To(Succeed())
 		})
 
-		// Tests are marked Pending (PIt) because the controller doesn't implement
-		// namespace logic yet (TDD red phase). Change PIt → It when implementing Task 5.
-
-		PIt("should set annotation on namespace with project label", func() {
+		It("should set annotation on namespace with project label", func() {
 			project := &platformv1alpha1.Project{
 				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
 			}
@@ -269,7 +266,7 @@ var _ = Describe("Project Controller", func() {
 				"annotation %s must be set to project name", projectAnnotationKey)
 		})
 
-		PIt("should populate status.namespaces with labeled namespaces", func() {
+		It("should populate status.namespaces with labeled namespaces", func() {
 			project := &platformv1alpha1.Project{
 				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
 			}
@@ -304,7 +301,7 @@ var _ = Describe("Project Controller", func() {
 			Expect(nsNames).To(ContainElements("ns-attach-status-1", "ns-attach-status-2"))
 		})
 
-		PIt("should include namespace phase in status.namespaces entries", func() {
+		It("should include namespace phase in status.namespaces entries", func() {
 			project := &platformv1alpha1.Project{
 				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
 			}
@@ -333,7 +330,7 @@ var _ = Describe("Project Controller", func() {
 				"namespace status must reflect the namespace phase")
 		})
 
-		PIt("should not include namespaces labeled for a different project", func() {
+		It("should not include namespaces labeled for a different project", func() {
 			project := &platformv1alpha1.Project{
 				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
 			}
@@ -371,7 +368,7 @@ var _ = Describe("Project Controller", func() {
 			Expect(updated.Status.Namespaces[0].Name).To(Equal("ns-attach-mine"))
 		})
 
-		PIt("should remove namespace from status when namespace is deleted", func() {
+		It("should remove namespace from status when namespace is deleted", func() {
 			project := &platformv1alpha1.Project{
 				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
 			}
@@ -414,7 +411,7 @@ var _ = Describe("Project Controller", func() {
 				"deleted namespace must be removed from status.namespaces")
 		})
 
-		PIt("should restore label if removed from managed namespace", func() {
+		It("should restore label if removed from managed namespace", func() {
 			project := &platformv1alpha1.Project{
 				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
 			}
@@ -465,7 +462,7 @@ var _ = Describe("Project Controller", func() {
 				"label must be restored on managed namespace (has annotation)")
 		})
 
-		PIt("should not duplicate namespaces in status on repeated reconciles", func() {
+		It("should not duplicate namespaces in status on repeated reconciles", func() {
 			project := &platformv1alpha1.Project{
 				ObjectMeta: metav1.ObjectMeta{Name: nsProjectName},
 			}
