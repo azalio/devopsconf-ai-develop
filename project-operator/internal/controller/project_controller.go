@@ -18,6 +18,8 @@ package controller
 
 import (
 	"context"
+	"reflect"
+	"sort"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -78,6 +80,11 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		}
 	}
 
+	// Snapshot status before reconciliation for change detection
+	origPhase := project.Status.Phase
+	origNamespaces := make([]platformv1alpha1.NamespaceStatus, len(project.Status.Namespaces))
+	copy(origNamespaces, project.Status.Namespaces)
+
 	// Reconcile namespaces: set annotations, restore labels, build status list
 	if err := r.reconcileNamespaces(ctx, project); err != nil {
 		return ctrl.Result{}, err
@@ -88,9 +95,11 @@ func (r *ProjectReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		project.Status.Phase = platformv1alpha1.ProjectPhaseActive
 	}
 
-	// Persist status (phase + namespaces)
-	if err := r.Status().Update(ctx, project); err != nil {
-		return ctrl.Result{}, err
+	// Persist status only if changed
+	if project.Status.Phase != origPhase || !reflect.DeepEqual(project.Status.Namespaces, origNamespaces) {
+		if err := r.Status().Update(ctx, project); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	return ctrl.Result{}, nil
@@ -138,30 +147,32 @@ func (r *ProjectReconciler) reconcileNamespaces(ctx context.Context, project *pl
 		})
 	}
 
-	// Find managed namespaces that lost their label (have annotation but no label)
-	var allList corev1.NamespaceList
-	if err := r.List(ctx, &allList); err != nil {
-		return err
-	}
-
-	for i := range allList.Items {
-		ns := &allList.Items[i]
-		if !ns.DeletionTimestamp.IsZero() {
-			continue
+	// Check previously known namespaces that may have lost their label.
+	// Uses previous status instead of listing all cluster namespaces.
+	for _, prev := range project.Status.Namespaces {
+		if _, ok := labeledNames[prev.Name]; ok {
+			continue // still labeled correctly
 		}
-		if _, ok := labeledNames[ns.Name]; ok {
+		var ns corev1.Namespace
+		if err := r.Get(ctx, types.NamespacedName{Name: prev.Name}, &ns); err != nil {
+			continue // namespace deleted or not found
+		}
+		if !ns.DeletionTimestamp.IsZero() {
 			continue
 		}
 		if ns.Annotations == nil || ns.Annotations[projectAnnotationKey] != projectName {
 			continue
 		}
+		// Only restore if label is truly absent; skip if it points to another project
+		if ns.Labels[projectLabelKey] != "" {
+			continue
+		}
 
-		// Managed namespace lost its label — restore it
 		if ns.Labels == nil {
 			ns.Labels = make(map[string]string)
 		}
 		ns.Labels[projectLabelKey] = projectName
-		if err := r.Update(ctx, ns); err != nil {
+		if err := r.Update(ctx, &ns); err != nil {
 			return err
 		}
 		log.Info("Restored project label on managed namespace", "namespace", ns.Name, "project", projectName)
@@ -171,6 +182,11 @@ func (r *ProjectReconciler) reconcileNamespaces(ctx context.Context, project *pl
 			Status: string(ns.Status.Phase),
 		})
 	}
+
+	// Sort by name for stable status output
+	sort.Slice(nsStatuses, func(i, j int) bool {
+		return nsStatuses[i].Name < nsStatuses[j].Name
+	})
 
 	project.Status.Namespaces = nsStatuses
 	return nil
