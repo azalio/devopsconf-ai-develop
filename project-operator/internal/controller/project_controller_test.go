@@ -21,6 +21,7 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -52,14 +53,17 @@ var _ = Describe("Project Controller", func() {
 	AfterEach(func() {
 		project := &platformv1alpha1.Project{}
 		err := k8sClient.Get(ctx, namespacedName, project)
-		if err == nil {
-			// Remove finalizer if present so the object can be deleted
-			if controllerutil.ContainsFinalizer(project, projectFinalizerName) {
-				controllerutil.RemoveFinalizer(project, projectFinalizerName)
-				Expect(k8sClient.Update(ctx, project)).To(Succeed())
-			}
-			Expect(k8sClient.Delete(ctx, project)).To(Succeed())
+		if errors.IsNotFound(err) {
+			return
 		}
+		Expect(err).NotTo(HaveOccurred())
+
+		// Remove finalizer if present so the object can be deleted
+		if controllerutil.ContainsFinalizer(project, projectFinalizerName) {
+			controllerutil.RemoveFinalizer(project, projectFinalizerName)
+			Expect(k8sClient.Update(ctx, project)).To(Succeed())
+		}
+		Expect(k8sClient.Delete(ctx, project)).To(Succeed())
 	})
 
 	Context("When a new Project is created", func() {
