@@ -1,16 +1,20 @@
 # project-operator
-// TODO(user): Add simple overview of use/purpose
+
+Kubernetes operator that groups namespaces into logical projects with shared quotas and role-based access control.
 
 ## Description
-// TODO(user): An in-depth paragraph about your project and overview of use
+
+Project Operator manages three cluster-scoped CRDs: `Project`, `ProjectRole`, and `ProjectAccessBinding`.
+It enforces resource quotas across project namespaces via admission webhooks and manages RBAC bindings automatically.
 
 ## Getting Started
 
 ### Prerequisites
-- go version v1.23.0+
-- docker version 17.03+.
-- kubectl version v1.11.3+.
-- Access to a Kubernetes v1.11.3+ cluster.
+- go version v1.24.0+
+- docker version 24.0+
+- kubectl version v1.30+
+- Access to a Kubernetes v1.30+ cluster
+- cert-manager installed in the cluster
 
 ### To Deploy on the cluster
 **Build and push your image to the location specified by `IMG`:**
