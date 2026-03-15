@@ -1,0 +1,9 @@
+apiVersion: platform.example.io/v1alpha1
+kind: ProjectRole
+metadata:
+  name: app-maintainer
+spec:
+  rules:
+    - apiGroups: [""]
+      resources: ["configmaps", "services"]
+      verbs: ["get", "list", "watch", "create", "update", "patch"]
