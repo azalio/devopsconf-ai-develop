@@ -72,10 +72,6 @@ mapify init                    # установка в проект
 
 11 специализированных агентов, state machine, branch-scoped артефакты.
 
-## Демо-сценарий
-
-Полный сценарий демонстрации с командами и ожидаемыми результатами: [demo-scenario.md](demo-scenario.md)
-
 ## Презентация
 
 Полный текст презентации со спикер-нотами: [devopsconf_2026_ai_operator_presentation_rewrite-v2.md](devopsconf_2026_ai_operator_presentation_rewrite-v2.md)
