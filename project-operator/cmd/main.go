@@ -31,7 +31,6 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
@@ -39,6 +38,7 @@ import (
 
 	platformv1alpha1 "github.com/example/project-operator/api/v1alpha1"
 	"github.com/example/project-operator/internal/controller"
+	"github.com/example/project-operator/internal/health"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -178,7 +178,8 @@ func main() {
 		})
 	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	restConfig := ctrl.GetConfigOrDie()
+	mgr, err := ctrl.NewManager(restConfig, ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
 		WebhookServer:          webhookServer,
@@ -241,11 +242,17 @@ func main() {
 		}
 	}
 
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+	livenessChecker, err := health.NewAPIServerLivenessChecker(restConfig)
+	if err != nil {
+		setupLog.Error(err, "unable to create liveness checker")
+		os.Exit(1)
+	}
+	if err := mgr.AddHealthzCheck("healthz", livenessChecker.Check); err != nil {
 		setupLog.Error(err, "unable to set up health check")
 		os.Exit(1)
 	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+	readinessChecker := health.NewCacheReadinessChecker(mgr.GetCache())
+	if err := mgr.AddReadyzCheck("readyz", readinessChecker.Check); err != nil {
 		setupLog.Error(err, "unable to set up ready check")
 		os.Exit(1)
 	}
